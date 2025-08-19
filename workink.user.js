@@ -3,7 +3,7 @@
 // @namespace    http://tampermonkey.net/
 // @version      13.4
 // @description  Bypasses the extension check and hides ads/popups on Work.ink for a cleaner experience.
-// @author       You
+// @author       tomato.txt
 // @match        *://*.work.ink/*
 // @run-at       document-start
 // @grant        unsafeWindow
