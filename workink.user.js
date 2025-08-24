@@ -107,7 +107,7 @@
     }
 
     // --- Part 4: URL-based Delay Logic ---
-    const thirtySeconds = 30000;
+    const thirtySeconds = 0;
 
     // Check if the specific path is in the URL
     if (window.location.href.includes('work.ink/22hr/')) {
