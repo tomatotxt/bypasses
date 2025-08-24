@@ -1,9 +1,9 @@
 // ==UserScript==
-// @name         Work.ink Adblock Bypass and Auto-Clicker (Stops on Unfocus)
+// @name         Work.ink Adblock Bypass and Auto-Clicker (Focus Aware)
 // @namespace    http://tampermonkey.net/
-// @version      1.2
-// @description  Bypasses adblock/extension checks and auto-clicks "accessBtn" buttons. Stops permanently when tab loses focus.
-// @author       Your Name
+// @version      1000000
+// @description  Bypasses adblock detection and extension checks on work.ink, and automatically clicks "accessBtn" buttons only when the tab is active.
+// @author       tomato.txt
 // @match        *://*.work.ink/*
 // @grant        unsafeWindow
 // ==/UserScript==
@@ -68,7 +68,7 @@
         }
     };
 
-    // --- Part 3: Automatic Button Clicker (Stops on Unfocus) ---
+    // --- Part 3: Automatic Button Clicker (Focus Aware) ---
     const clickIntervalTime = 250; // Clicks every 250 milliseconds (4 times a second)
     let clickerInterval = null;
 
@@ -96,8 +96,10 @@
         if (document.hidden) {
             // Tab became hidden - stop clicking
             stopClicking();
+        } else {
+            // Tab became visible - start clicking
+            startClicking();
         }
-        // The "else" block that would restart the clicking has been removed as requested.
     });
 
     // Initial check: if the page is loaded and already visible, start clicking
