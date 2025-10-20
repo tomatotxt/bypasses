@@ -41,5 +41,5 @@ That's it! The script is now installed and will run automatically when you visit
 
 You can check which scripts are installed and active by clicking the Tampermonkey icon in your browser and selecting "Dashboard".
 ***
- ### How to Use the Auto Volcano Next Script
+ ### How to Use the Volcano Key System Bypasser 
  Once the script is installed in Tampermonkey, you don't need to do anything else. Just go to a Volcano key system link, and the script will automatically bypass it for you. No clicks or any other actions are required on your part.
