@@ -58,8 +58,8 @@
     const saveButton = document.getElementById('save-cooldown-btn');
     const statusMessage = document.getElementById('status-message');
 
-    // Load saved cooldown value, default to 3 seconds if not set
-    let savedCooldown = GM_getValue('cooldown', 20);
+    // Load saved cooldown value, default to 13 seconds if not set
+    let savedCooldown = GM_getValue('cooldown', 13);
     cooldownInput.value = savedCooldown;
 
     saveButton.addEventListener('click', () => {
