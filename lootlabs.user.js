@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Universal LootLabs Bypass
 // @namespace    http://tampermonkey.net/
-// @version      7.0
-// @description  A clean, readable bypass for LootLabs link lockers. Snipes links from data streams and automates tasks.
+// @version      8.1
+// @description  Instant bypass for LootLabs. Snipes links directly from data streams without unnecessary delays.
 // @author       tomato.txt
 // @match        *://*.lootlabs.gg/*
 // @match        *://*.loot-link.com/*
@@ -15,147 +15,135 @@
     'use strict';
 
     /**
-     * CONFIGURATION & STATE
+     * @constant {Object} CONFIG
+     * Centralized configuration for selectors and UI IDs.
      */
-    const STATE = {
-        destinationFound: false,
-        taskAutomationStarted: false,
-        estimatedWaitTime: 15 // Default fallback
+    const CONFIG = {
+        OVERLAY_ID: 'bypass-curtain',
+        STATUS_ID: 'bypass-status',
+        TIMER_ID: 'bypass-timer',
+        BAR_ID: 'bypass-bar',
+        TASK_SELECTOR: '.task',
+        TIME_SELECTOR: '.task-time'
     };
 
-    const SELECTORS = {
-        taskItem: '.task',
-        taskTime: '.task-time',
-        overlayId: 'loot-bypass-overlay',
-        progressBarId: 'loot-progress-fill',
-        statusId: 'loot-status-text',
-        timerId: 'loot-timer-text'
-    };
+    let isRedirecting = false;
 
     /**
-     * UTILITIES
+     * XOR Decryption logic extracted from the platform's core.
+     * @param {string} encoded - The base64 + XOR encoded string.
+     * @returns {string|null} - The decrypted URL or null if invalid.
      */
-
-    // Decodes the XOR-encrypted links used by LootLabs
-    // Logic extracted from their internal '35.js' logic
-    function decryptLootLink(encoded) {
+    function decryptUrl(encoded) {
         try {
             const raw = atob(encoded);
             const key = raw.substring(0, 5);
-            const encrypted = raw.substring(5);
-            let decrypted = '';
+            const content = raw.substring(5);
+            let result = '';
 
-            for (let i = 0; i < encrypted.length; i++) {
-                decrypted += String.fromCharCode(encrypted.charCodeAt(i) ^ key.charCodeAt(i % 5));
+            for (let i = 0; i < content.length; i++) {
+                result += String.fromCharCode(content.charCodeAt(i) ^ key.charCodeAt(i % 5));
             }
-            return decrypted.includes('http') ? decrypted : null;
-        } catch (e) {
+            return result.includes('http') ? result : null;
+        } catch (err) {
             return null;
         }
     }
 
-    // Handles the final transition once the link is captured
-    function handleRedirect(url) {
-        if (STATE.destinationFound) return;
-        STATE.destinationFound = true;
+    /**
+     * Performs an immediate redirection to the sniped URL.
+     * @param {string} url - The destination URL.
+     */
+    function instantRedirect(url) {
+        if (isRedirecting) return;
+        isRedirecting = true;
 
-        console.log(`[Bypass] Destination sniped: ${url}`);
-
-        const statusEl = document.getElementById(SELECTORS.statusId);
-        const barEl = document.getElementById(SELECTORS.progressBarId);
-
-        if (statusEl) statusEl.innerText = "LINK CAPTURED! REDIRECTING...";
-        if (barEl) {
-            barEl.style.width = "100%";
-            barEl.style.backgroundColor = "#10b981";
-        }
-
-        setTimeout(() => {
-            window.location.replace(url);
-        }, 500);
+        // Update UI state immediately before jump
+        const status = document.getElementById(CONFIG.STATUS_ID);
+        if (status) status.innerText = "LINK SNIPED! JUMPING...";
+        
+        // Zero delay redirect
+        window.location.replace(url);
     }
 
     /**
-     * UI COMPONENT (The "Curtain")
+     * Injects a clean bypassing overlay to hide the original site.
      */
-    function injectOverlay() {
-        if (document.getElementById(SELECTORS.overlayId)) return;
+    function injectUI() {
+        if (document.getElementById(CONFIG.OVERLAY_ID)) return;
 
         const style = document.createElement('style');
         style.innerHTML = `
-            #${SELECTORS.overlayId} {
+            #${CONFIG.OVERLAY_ID} {
                 position: fixed; inset: 0; z-index: 2147483647;
                 background: #020617; color: #f8fafc;
                 display: flex; flex-direction: column; align-items: center; justify-content: center;
                 font-family: system-ui, -apple-system, sans-serif;
             }
-            .bypass-card { text-align: center; width: 350px; padding: 20px; }
-            .header-text { font-size: 16px; font-weight: 800; letter-spacing: 0.1em; color: #38bdf8; text-transform: uppercase; }
-            .bar-bg { width: 100%; height: 8px; background: #1e293b; border-radius: 10px; margin: 20px 0; overflow: hidden; }
-            #${SELECTORS.progressBarId} { width: 0%; height: 100%; background: #38bdf8; transition: width 1s linear; }
-            .timer-val { font-size: 48px; font-weight: 200; margin-bottom: 10px; }
-            .status-sub { font-size: 12px; color: #64748b; font-family: monospace; }
-            .exit-hint { margin-top: 40px; font-size: 10px; color: #334155; cursor: pointer; text-decoration: underline; }
+            .bypass-box { text-align: center; width: 300px; }
+            .header { font-size: 14px; font-weight: 700; color: #38bdf8; text-transform: uppercase; letter-spacing: 2px; }
+            .timer { font-size: 40px; font-weight: 200; margin: 10px 0; }
+            .progress-bg { width: 100%; height: 4px; background: #1e293b; border-radius: 2px; overflow: hidden; }
+            #${CONFIG.BAR_ID} { width: 0%; height: 100%; background: #38bdf8; transition: width 1s linear; }
+            .status { font-size: 11px; color: #64748b; margin-top: 15px; font-family: monospace; }
+            .remove-btn { 
+                margin-top: 40px; 
+                background: transparent; 
+                border: 1px solid #334155; 
+                color: #475569; 
+                padding: 6px 12px; 
+                font-size: 10px; 
+                text-transform: uppercase; 
+                cursor: pointer; 
+                letter-spacing: 1px;
+                border-radius: 4px;
+                transition: all 0.2s;
+            }
+            .remove-btn:hover { border-color: #f87171; color: #f87171; }
         `;
         document.documentElement.appendChild(style);
 
         const overlay = document.createElement('div');
-        overlay.id = SELECTORS.overlayId;
+        overlay.id = CONFIG.OVERLAY_ID;
         overlay.innerHTML = `
-            <div class="bypass-card">
-                <div class="header-text">Universal Bypass</div>
-                <div id="${SELECTORS.timerId}" class="timer-val">0s</div>
-                <div class="bar-bg"><div id="${SELECTORS.progressBarId}"></div></div>
-                <div id="${SELECTORS.statusId}" class="status-sub">Synchronizing with server...</div>
-                <div class="exit-hint" onclick="document.getElementById('${SELECTORS.overlayId}').remove()">Close Overlay (View Original Page)</div>
+            <div class="bypass-box">
+                <div class="header">Bypassing</div>
+                <div id="${CONFIG.TIMER_ID}" class="timer">--s</div>
+                <div class="progress-bg"><div id="${CONFIG.BAR_ID}"></div></div>
+                <div id="${CONFIG.STATUS_ID}" class="status">Intercepting handshake...</div>
+                <button class="remove-btn" onclick="document.getElementById('${CONFIG.OVERLAY_ID}').remove()">Remove Overlay</button>
             </div>
         `;
         document.body.appendChild(overlay);
     }
 
-    function runCountdown(seconds) {
-        let remaining = seconds;
-        const timerEl = document.getElementById(SELECTORS.timerId);
-        const barEl = document.getElementById(SELECTORS.progressBarId);
-
-        const interval = setInterval(() => {
-            if (STATE.destinationFound || remaining <= 0) {
-                clearInterval(interval);
-                return;
-            }
-            remaining--;
-            timerEl.innerText = `${remaining}s`;
-            barEl.style.width = `${((seconds - remaining) / seconds) * 100}%`;
-        }, 1000);
-    }
-
     /**
-     * NETWORK INTERCEPTORS (The Sniffers)
+     * NETWORK HOOKS
+     * Monitoring WebSocket and Fetch channels for the real link delivery.
      */
 
-    // 1. WebSocket Hook: Snipes links sent via 'r:' prefix
-    const OriginalWebSocket = window.WebSocket;
-    window.WebSocket = function(url, protocols) {
-        const ws = new OriginalWebSocket(url, protocols);
-        ws.addEventListener('message', (event) => {
+    // 1. WebSocket Hook
+    const NativeWebSocket = window.WebSocket;
+    window.WebSocket = function(...args) {
+        const socket = new NativeWebSocket(...args);
+        socket.addEventListener('message', (event) => {
             if (typeof event.data === 'string' && event.data.startsWith('r:')) {
-                const encrypted = event.data.replace('r:', '');
-                const decrypted = decryptLootLink(encrypted);
-                if (decrypted) handleRedirect(decrypted);
+                const decrypted = decryptUrl(event.data.replace('r:', ''));
+                if (decrypted) instantRedirect(decrypted);
             }
         });
-        return ws;
+        return socket;
     };
 
-    // 2. Fetch Hook: Intercepts links delivered via JSON APIs
-    const originalFetch = window.fetch;
+    // 2. Fetch Hook
+    const nativeFetch = window.fetch;
     window.fetch = async (...args) => {
-        const response = await originalFetch(...args);
+        const response = await nativeFetch(...args);
         const clone = response.clone();
         clone.json().then(data => {
-            const possible = data.url || data.link || data.destination || data.real_link;
-            if (typeof possible === 'string' && possible.includes('http')) {
-                handleRedirect(possible);
+            const possibleLink = data.url || data.link || data.destination;
+            if (typeof possibleLink === 'string' && possibleLink.includes('http')) {
+                instantRedirect(possibleLink);
             }
         }).catch(() => {});
         return response;
@@ -163,43 +151,42 @@
 
     /**
      * DOM AUTOMATION
+     * Scans for tasks, reads estimated time, and starts automation.
      */
-    function scanAndTriggerTasks() {
-        const tasks = document.querySelectorAll(SELECTORS.taskItem);
-        if (tasks.length > 0 && !STATE.taskAutomationStarted) {
-            STATE.taskAutomationStarted = true;
-
-            let maxFoundTime = 15;
+    function initializeAutomation() {
+        const tasks = document.querySelectorAll(CONFIG.TASK_SELECTOR);
+        if (tasks.length > 0 && !isRedirecting) {
+            let maxSeconds = 15; // Fallback
 
             tasks.forEach(task => {
-                // Determine wait time from the HTML elements
-                const timeDisplay = task.querySelector(SELECTORS.taskTime);
-                if (timeDisplay) {
-                    const parsedTime = parseInt(timeDisplay.innerText.replace(/\D/g, ''));
-                    if (!isNaN(parsedTime) && parsedTime > maxFoundTime) {
-                        maxFoundTime = parsedTime;
-                    }
+                const timeEl = task.querySelector(CONFIG.TIME_SELECTOR);
+                if (timeEl) {
+                    const parsed = parseInt(timeEl.innerText.replace(/\D/g, ''));
+                    if (!isNaN(parsed) && parsed > maxSeconds) maxSeconds = parsed;
                 }
-                // Automatically click to start the server-side countdown
-                task.click();
+                task.click(); // Start task
             });
 
-            STATE.estimatedWaitTime = maxFoundTime;
-            injectOverlay();
-            runCountdown(STATE.estimatedWaitTime);
-            console.log(`[Bypass] Tasks triggered. Estimated wait: ${maxFoundTime}s`);
+            injectUI();
+            startCountdown(maxSeconds);
+            domObserver.disconnect();
         }
     }
 
-    // Monitor for the moment tasks appear on screen
-    const domObserver = new MutationObserver(() => scanAndTriggerTasks());
-    domObserver.observe(document.documentElement, { childList: true, subtree: true });
+    function startCountdown(seconds) {
+        let remaining = seconds;
+        const timerText = document.getElementById(CONFIG.TIMER_ID);
+        const bar = document.getElementById(CONFIG.BAR_ID);
 
-    // Speed up standard UI timeouts (Visual only)
-    const originalTimeout = window.setTimeout;
-    window.setTimeout = function(fn, delay) {
-        if (delay >= 1000 && !STATE.destinationFound) delay = 50;
-        return originalTimeout(fn, delay);
-    };
+        const tick = setInterval(() => {
+            if (isRedirecting || remaining <= 0 || !document.getElementById(CONFIG.OVERLAY_ID)) return clearInterval(tick);
+            remaining--;
+            if (timerText) timerText.innerText = `${remaining}s`;
+            if (bar) bar.style.width = `${((seconds - remaining) / seconds) * 100}%`;
+        }, 1000);
+    }
+
+    const domObserver = new MutationObserver(() => initializeAutomation());
+    domObserver.observe(document.documentElement, { childList: true, subtree: true });
 
 })();
