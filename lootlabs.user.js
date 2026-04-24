@@ -7,7 +7,6 @@
 // @match        *://*.lootlabs.gg/*
 // @match        *://*.loot-link.com/*
 // @match        *://*.lootdest.org/*
-// @match        *://*.cloudfront.net/*
 // @grant        none
 // @run-at       document-start
 // ==/UserScript==
