@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Universal LootLabs Bypass
 // @namespace    http://tampermonkey.net/
-// @version      8.1
-// @description  Instant bypass for LootLabs. Snipes links directly from data streams without unnecessary delays.
+// @version      10.0
+// @description  Instant bypass for LootLabs. Snipes links, blocks all task pop-ups, and syncs countdown with tab title.
 // @author       tomato.txt
 // @match        *://*.lootlabs.gg/*
 // @match        *://*.loot-link.com/*
@@ -28,11 +28,25 @@
     };
 
     let isRedirecting = false;
+    const originalTitle = document.title;
+
+    /**
+     * ANTI-POPUP LOGIC
+     * Hijacks window.open to prevent ads/social tasks from opening new tabs.
+     */
+    window.open = function() {
+        console.log("[Bypass] Blocked a popup attempt.");
+        return {
+            closed: false,
+            close: function() {},
+            focus: function() {},
+            blur: function() {},
+            postMessage: function() {}
+        };
+    };
 
     /**
      * XOR Decryption logic extracted from the platform's core.
-     * @param {string} encoded - The base64 + XOR encoded string.
-     * @returns {string|null} - The decrypted URL or null if invalid.
      */
     function decryptUrl(encoded) {
         try {
@@ -52,17 +66,15 @@
 
     /**
      * Performs an immediate redirection to the sniped URL.
-     * @param {string} url - The destination URL.
      */
     function instantRedirect(url) {
         if (isRedirecting) return;
         isRedirecting = true;
 
-        // Update UI state immediately before jump
+        document.title = "REDIRECTING...";
         const status = document.getElementById(CONFIG.STATUS_ID);
         if (status) status.innerText = "LINK SNIPED! JUMPING...";
         
-        // Zero delay redirect
         window.location.replace(url);
     }
 
@@ -111,15 +123,19 @@
                 <div id="${CONFIG.TIMER_ID}" class="timer">--s</div>
                 <div class="progress-bg"><div id="${CONFIG.BAR_ID}"></div></div>
                 <div id="${CONFIG.STATUS_ID}" class="status">Intercepting handshake...</div>
-                <button class="remove-btn" onclick="document.getElementById('${CONFIG.OVERLAY_ID}').remove()">Remove Overlay</button>
+                <button id="close-bypass" class="remove-btn">Remove Overlay</button>
             </div>
         `;
         document.body.appendChild(overlay);
+
+        document.getElementById('close-bypass').addEventListener('click', () => {
+            overlay.remove();
+            document.title = originalTitle;
+        });
     }
 
     /**
      * NETWORK HOOKS
-     * Monitoring WebSocket and Fetch channels for the real link delivery.
      */
 
     // 1. WebSocket Hook
@@ -151,12 +167,11 @@
 
     /**
      * DOM AUTOMATION
-     * Scans for tasks, reads estimated time, and starts automation.
      */
     function initializeAutomation() {
         const tasks = document.querySelectorAll(CONFIG.TASK_SELECTOR);
         if (tasks.length > 0 && !isRedirecting) {
-            let maxSeconds = 15; // Fallback
+            let maxSeconds = 15; 
 
             tasks.forEach(task => {
                 const timeEl = task.querySelector(CONFIG.TIME_SELECTOR);
@@ -164,7 +179,9 @@
                     const parsed = parseInt(timeEl.innerText.replace(/\D/g, ''));
                     if (!isNaN(parsed) && parsed > maxSeconds) maxSeconds = parsed;
                 }
-                task.click(); // Start task
+                // We click the task to notify the server we've started, 
+                // but window.open (above) prevents the tab from appearing.
+                task.click(); 
             });
 
             injectUI();
@@ -179,10 +196,22 @@
         const bar = document.getElementById(CONFIG.BAR_ID);
 
         const tick = setInterval(() => {
-            if (isRedirecting || remaining <= 0 || !document.getElementById(CONFIG.OVERLAY_ID)) return clearInterval(tick);
+            if (isRedirecting || !document.getElementById(CONFIG.OVERLAY_ID)) {
+                return clearInterval(tick);
+            }
+
             remaining--;
-            if (timerText) timerText.innerText = `${remaining}s`;
+            const timeString = remaining > 0 ? `${remaining}s` : "0s";
+            
+            if (timerText) timerText.innerText = timeString;
             if (bar) bar.style.width = `${((seconds - remaining) / seconds) * 100}%`;
+            
+            document.title = `(${timeString}) Bypassing...`;
+
+            if (remaining <= 0) {
+                 document.title = "Awaiting Server...";
+                 if (timerText) timerText.innerText = "0s";
+            }
         }, 1000);
     }
 
