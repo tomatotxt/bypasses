@@ -1,11 +1,13 @@
 // ==UserScript==
-// @name         Checkpoint 1 - Intelligence Sniper
+// @name         Universal LootLabs Bypass
 // @namespace    http://tampermonkey.net/
-// @version      6.0
-// @description  Hides UI, detects task times from HTML, snipes link, and redirects.
-// @author       AI Assistant
+// @version      7.0
+// @description  A clean, readable bypass for LootLabs link lockers. Snipes links from data streams and automates tasks.
+// @author       tomato.txt
+// @match        *://*.lootlabs.gg/*
+// @match        *://*.loot-link.com/*
+// @match        *://*.lootdest.org/*
 // @match        *://*.cloudfront.net/*
-// @match        *://links.lootlabs.gg/*
 // @grant        none
 // @run-at       document-start
 // ==/UserScript==
@@ -13,143 +15,192 @@
 (function() {
     'use strict';
 
-    let snipedLink = null;
-    let bypassActive = false;
+    /**
+     * CONFIGURATION & STATE
+     */
+    const STATE = {
+        destinationFound: false,
+        taskAutomationStarted: false,
+        estimatedWaitTime: 15 // Default fallback
+    };
 
-    // 1. Forceful "Curtain" Style
-    const style = document.createElement('style');
-    style.innerHTML = `
-        #bypass-screen {
-            position: fixed; inset: 0; z-index: 2147483647;
-            background: #020617; color: #f8fafc;
-            display: flex; flex-direction: column; align-items: center; justify-content: center;
-            font-family: 'Inter', system-ui, -apple-system, sans-serif;
-        }
-        .container { text-align: center; width: 320px; }
-        .header { font-size: 14px; font-weight: 800; letter-spacing: 0.2em; color: #38bdf8; margin-bottom: 5px; text-transform: uppercase; }
-        .sub-header { font-size: 11px; color: #64748b; margin-bottom: 30px; }
-        .progress-container { width: 100%; height: 6px; background: #1e293b; border-radius: 10px; overflow: hidden; margin-bottom: 15px; }
-        #progress-bar { width: 0%; height: 100%; background: #0ea5e9; transition: width 1s linear; box-shadow: 0 0 15px #0ea5e9; }
-        .timer-val { font-size: 32px; font-weight: 300; font-variant-numeric: tabular-nums; }
-        .footer-note { font-size: 10px; color: #334155; margin-top: 40px; text-transform: uppercase; cursor: pointer; }
-        .footer-note:hover { color: #475569; }
-    `;
-    document.documentElement.appendChild(style);
+    const SELECTORS = {
+        taskItem: '.task',
+        taskTime: '.task-time',
+        overlayId: 'loot-bypass-overlay',
+        progressBarId: 'loot-progress-fill',
+        statusId: 'loot-status-text',
+        timerId: 'loot-timer-text'
+    };
 
-    // 2. Decoder Logic (The original logic from the site)
-    function decrypt(encoded) {
+    /**
+     * UTILITIES
+     */
+
+    // Decodes the XOR-encrypted links used by LootLabs
+    // Logic extracted from their internal '35.js' logic
+    function decryptLootLink(encoded) {
         try {
-            let raw = atob(encoded);
-            let key = raw.substring(0, 5);
-            let content = raw.substring(5);
-            let decoded = '';
-            for (let i = 0; i < content.length; i++) {
-                decoded += String.fromCharCode(content.charCodeAt(i) ^ key.charCodeAt(i % 5));
+            const raw = atob(encoded);
+            const key = raw.substring(0, 5);
+            const encrypted = raw.substring(5);
+            let decrypted = '';
+
+            for (let i = 0; i < encrypted.length; i++) {
+                decrypted += String.fromCharCode(encrypted.charCodeAt(i) ^ key.charCodeAt(i % 5));
             }
-            return decoded.includes('http') ? decoded : null;
-        } catch (e) { return null; }
-    }
-
-    function attemptRedirect(url) {
-        if (snipedLink) return;
-        snipedLink = url;
-        const statusEl = document.querySelector('.sub-header');
-        const timerEl = document.querySelector('.timer-val');
-        if (statusEl) statusEl.innerText = "LINK ACQUIRED";
-        if (timerEl) {
-            timerEl.innerText = "GO";
-            timerEl.style.color = "#10b981";
+            return decrypted.includes('http') ? decrypted : null;
+        } catch (e) {
+            return null;
         }
-        document.getElementById('progress-bar').style.width = "100%";
-        document.getElementById('progress-bar').style.background = "#10b981";
-        setTimeout(() => { window.location.href = url; }, 400);
     }
 
-    // 3. Channel Sniffing (WS, Fetch, XHR)
-    const WS = window.WebSocket;
-    window.WebSocket = function(a, b) {
-        const ws = new WS(a, b);
-        ws.addEventListener('message', (e) => {
-            if (typeof e.data === 'string' && e.data.startsWith('r:')) {
-                const url = decrypt(e.data.replace('r:', ''));
-                if (url) attemptRedirect(url);
+    // Handles the final transition once the link is captured
+    function handleRedirect(url) {
+        if (STATE.destinationFound) return;
+        STATE.destinationFound = true;
+
+        console.log(`[Bypass] Destination sniped: ${url}`);
+
+        const statusEl = document.getElementById(SELECTORS.statusId);
+        const barEl = document.getElementById(SELECTORS.progressBarId);
+
+        if (statusEl) statusEl.innerText = "LINK CAPTURED! REDIRECTING...";
+        if (barEl) {
+            barEl.style.width = "100%";
+            barEl.style.backgroundColor = "#10b981";
+        }
+
+        setTimeout(() => {
+            window.location.replace(url);
+        }, 500);
+    }
+
+    /**
+     * UI COMPONENT (The "Curtain")
+     */
+    function injectOverlay() {
+        if (document.getElementById(SELECTORS.overlayId)) return;
+
+        const style = document.createElement('style');
+        style.innerHTML = `
+            #${SELECTORS.overlayId} {
+                position: fixed; inset: 0; z-index: 2147483647;
+                background: #020617; color: #f8fafc;
+                display: flex; flex-direction: column; align-items: center; justify-content: center;
+                font-family: system-ui, -apple-system, sans-serif;
+            }
+            .bypass-card { text-align: center; width: 350px; padding: 20px; }
+            .header-text { font-size: 16px; font-weight: 800; letter-spacing: 0.1em; color: #38bdf8; text-transform: uppercase; }
+            .bar-bg { width: 100%; height: 8px; background: #1e293b; border-radius: 10px; margin: 20px 0; overflow: hidden; }
+            #${SELECTORS.progressBarId} { width: 0%; height: 100%; background: #38bdf8; transition: width 1s linear; }
+            .timer-val { font-size: 48px; font-weight: 200; margin-bottom: 10px; }
+            .status-sub { font-size: 12px; color: #64748b; font-family: monospace; }
+            .exit-hint { margin-top: 40px; font-size: 10px; color: #334155; cursor: pointer; text-decoration: underline; }
+        `;
+        document.documentElement.appendChild(style);
+
+        const overlay = document.createElement('div');
+        overlay.id = SELECTORS.overlayId;
+        overlay.innerHTML = `
+            <div class="bypass-card">
+                <div class="header-text">Universal Bypass</div>
+                <div id="${SELECTORS.timerId}" class="timer-val">0s</div>
+                <div class="bar-bg"><div id="${SELECTORS.progressBarId}"></div></div>
+                <div id="${SELECTORS.statusId}" class="status-sub">Synchronizing with server...</div>
+                <div class="exit-hint" onclick="document.getElementById('${SELECTORS.overlayId}').remove()">Close Overlay (View Original Page)</div>
+            </div>
+        `;
+        document.body.appendChild(overlay);
+    }
+
+    function runCountdown(seconds) {
+        let remaining = seconds;
+        const timerEl = document.getElementById(SELECTORS.timerId);
+        const barEl = document.getElementById(SELECTORS.progressBarId);
+
+        const interval = setInterval(() => {
+            if (STATE.destinationFound || remaining <= 0) {
+                clearInterval(interval);
+                return;
+            }
+            remaining--;
+            timerEl.innerText = `${remaining}s`;
+            barEl.style.width = `${((seconds - remaining) / seconds) * 100}%`;
+        }, 1000);
+    }
+
+    /**
+     * NETWORK INTERCEPTORS (The Sniffers)
+     */
+
+    // 1. WebSocket Hook: Snipes links sent via 'r:' prefix
+    const OriginalWebSocket = window.WebSocket;
+    window.WebSocket = function(url, protocols) {
+        const ws = new OriginalWebSocket(url, protocols);
+        ws.addEventListener('message', (event) => {
+            if (typeof event.data === 'string' && event.data.startsWith('r:')) {
+                const encrypted = event.data.replace('r:', '');
+                const decrypted = decryptLootLink(encrypted);
+                if (decrypted) handleRedirect(decrypted);
             }
         });
         return ws;
     };
 
-    const origFetch = window.fetch;
+    // 2. Fetch Hook: Intercepts links delivered via JSON APIs
+    const originalFetch = window.fetch;
     window.fetch = async (...args) => {
-        const response = await origFetch(...args);
+        const response = await originalFetch(...args);
         const clone = response.clone();
-        try {
-            const data = await clone.json();
-            const possible = data.url || data.link || data.destination;
-            if (possible && possible.includes('http')) attemptRedirect(possible);
-        } catch (e) {}
+        clone.json().then(data => {
+            const possible = data.url || data.link || data.destination || data.real_link;
+            if (typeof possible === 'string' && possible.includes('http')) {
+                handleRedirect(possible);
+            }
+        }).catch(() => {});
         return response;
     };
 
-    // 4. UI Creation
-    function createUI(estimatedSeconds) {
-        if (document.getElementById('bypass-screen')) return;
-        const screen = document.createElement('div');
-        screen.id = 'bypass-screen';
-        screen.innerHTML = `
-            <div class="container">
-                <div class="header">Bypass Active</div>
-                <div class="sub-header">Analyzing security protocols...</div>
-                <div class="timer-val" id="b-timer">${estimatedSeconds}s</div>
-                <div class="progress-container">
-                    <div id="progress-bar"></div>
-                </div>
-                <div class="footer-note" onclick="document.getElementById('bypass-screen').remove()">Hide Overlay</div>
-            </div>
-        `;
-        document.body.appendChild(screen);
+    /**
+     * DOM AUTOMATION
+     */
+    function scanAndTriggerTasks() {
+        const tasks = document.querySelectorAll(SELECTORS.taskItem);
+        if (tasks.length > 0 && !STATE.taskAutomationStarted) {
+            STATE.taskAutomationStarted = true;
 
-        let current = estimatedSeconds;
-        const tick = setInterval(() => {
-            if (snipedLink || current <= 0) {
-                clearInterval(tick);
-                return;
-            }
-            current--;
-            document.getElementById('b-timer').innerText = current + 's';
-            let percent = ((estimatedSeconds - current) / estimatedSeconds) * 100;
-            document.getElementById('progress-bar').style.width = percent + "%";
-        }, 1000);
-    }
+            let maxFoundTime = 15;
 
-    // 5. Intelligent Task Detection
-    const findAndStartTasks = () => {
-        const tasks = document.querySelectorAll('.task');
-        if (tasks.length > 0 && !bypassActive) {
-            bypassActive = true;
-
-            let maxTaskTime = 15; // Minimum fallback
-            
             tasks.forEach(task => {
-                // Look for the task-time div provided in your prompt
-                const timeDiv = task.querySelector('.task-time');
-                if (timeDiv) {
-                    const foundTime = parseInt(timeDiv.innerText.replace(/\D/g, ''));
-                    if (!isNaN(foundTime) && foundTime > maxTaskTime) {
-                        maxTaskTime = foundTime;
+                // Determine wait time from the HTML elements
+                const timeDisplay = task.querySelector(SELECTORS.taskTime);
+                if (timeDisplay) {
+                    const parsedTime = parseInt(timeDisplay.innerText.replace(/\D/g, ''));
+                    if (!isNaN(parsedTime) && parsedTime > maxFoundTime) {
+                        maxFoundTime = parsedTime;
                     }
                 }
-                task.click(); // Trigger the task
+                // Automatically click to start the server-side countdown
+                task.click();
             });
 
-            createUI(maxTaskTime);
-            console.log(`Bypass: Tasks started. Longest wait: ${maxTaskTime}s`);
+            STATE.estimatedWaitTime = maxFoundTime;
+            injectOverlay();
+            runCountdown(STATE.estimatedWaitTime);
+            console.log(`[Bypass] Tasks triggered. Estimated wait: ${maxFoundTime}s`);
         }
-    };
+    }
 
-    // Use MutationObserver to wait for tasks to appear in the DOM
-    const observer = new MutationObserver(() => {
-        findAndStartTasks();
-    });
-    observer.observe(document.documentElement, { childList: true, subtree: true });
+    // Monitor for the moment tasks appear on screen
+    const domObserver = new MutationObserver(() => scanAndTriggerTasks());
+    domObserver.observe(document.documentElement, { childList: true, subtree: true });
+
+    // Speed up standard UI timeouts (Visual only)
+    const originalTimeout = window.setTimeout;
+    window.setTimeout = function(fn, delay) {
+        if (delay >= 1000 && !STATE.destinationFound) delay = 50;
+        return originalTimeout(fn, delay);
+    };
 
 })();
